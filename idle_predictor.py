@@ -28,6 +28,13 @@ class IdlePredictor:
             # drop_last=True,
             num_workers=2
         )
+        self.test_dataloader = DataLoader(
+            CustomDataset(path=test_path, seq_len=seq_len, use_cols=usecols),
+            batch_size=batch_size,
+            shuffle=True,
+            # drop_last=True,
+            num_workers=2
+        )
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = StackedLSTM(input_dim=len(usecols)).to(self.device)
         self.optimizer = self.get_optimizer(self.model.parameters(), self.optimizer, self.learning_rate)
@@ -66,15 +73,47 @@ class IdlePredictor:
         else:
             raise ValueError('loss_function이 pytorch에 존재하지 않습니다. 다시 확인하세요.')
 
+    def predict(self):
+        test_DataLoader = torch.utils.data.DataLoader(self.test_dataset, shuffle=False, batch_size=1)
+
+        print("***** Running Prediction *****")
+        print("  Num examples = {}".format(len(self.test_dataset)))
+        print("  Test Batch size = 1")
+
+        model.eval()
+        pred = None
+        label = None
+        for batch in test_DataLoader:
+            input_vector = batch[0].to(self.device)
+
+            with torch.no_grad():
+                predict = model(input_vector)
+
+            if pred is None:
+                pred = predict.detach().cpu().numpy()
+                label = batch[1].numpy()
+            else:
+                pred = np.append(pred, predict.detach().cpu().numpy(), axis=0)
+                label = np.append(label, batch[1].numpy(), axis=0)
+
+        pred = np.argmax(pred, axis=1)
+
+        print("***** Prediction 완료 *****")
+
+        return pred.tolist(), label.tolist()
+
+
+
     def train(self):
         self.set_seed(42)
         train_iterator = trange(self.epochs, desc="Epoch")
-
         print("  Num Epochs = {}".format(self.epochs))
         print("  Train Batch size = {}".format(self.batch_size))
         print("  Device = ", self.device)
         loss_history = []
-
+        self.model.to(self.device)
+        self.model.train(True)
+        self.model.zero_grad()
         best = {"loss": sys.float_info.max, "anger": 0}
         for epoch in train_iterator:
             loss_in_epoch = 0.0
@@ -84,10 +123,11 @@ class IdlePredictor:
                 label = label.to(self.device)
                 criterion = self.loss_function(output, label)
                 criterion.backward()
-                self.optimizer.zero_grad()
+                # self.optimizer.zero_grad()
                 self.optimizer.step()
+                self.model.zero_grad()
                 loss_in_epoch += criterion.item()
-                loss_history.append(loss_in_epoch)
+            loss_history.append(loss_in_epoch)
             if loss_in_epoch < best['loss']:
                 best["state"] = self.model.state_dict()
                 best["loss"] = loss_in_epoch
@@ -100,6 +140,7 @@ class IdlePredictor:
             if (epoch + 1) % 1 == 0:
                 print("  Epoch / Total Epoch : {} / {}".format(epoch + 1, self.epochs))
                 print("  Loss : {:.4f}".format(loss_in_epoch))
+        self.model.train(False)
         return best, loss_history
 
     def load_model(self, path='model.pt'):
