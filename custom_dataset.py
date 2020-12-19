@@ -7,7 +7,7 @@ from torch.utils.data import Dataset
 
 
 class CustomDataset(Dataset):
-    def __init__(self, path, seq_len, use_cols):
+    def __init__(self, path, seq_len, use_cols, testratio=1.0):
         self.files = glob.glob(os.path.join(path, '*'))
         self.usecols = use_cols
         self.seq_len = seq_len
@@ -22,8 +22,13 @@ class CustomDataset(Dataset):
             else:
                 self.data = datum
                 self.labels = label
-        self.data = torch.from_numpy(np.asarray(self.data[:1000]))
-        self.labels = torch.from_numpy(np.asarray(self.labels[:1000]))
+        if testratio < 1.0:
+            num_samples = int(len(self.data) * testratio)
+            self.data = self.data[:num_samples]
+            self.labels = self.labels[:num_samples]
+
+        self.data = torch.from_numpy(np.asarray(self.data))
+        self.labels = torch.from_numpy(np.asarray(self.labels))
 
     def __len__(self):
         return len(self.data)

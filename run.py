@@ -1,7 +1,6 @@
 import json
 import torch
 from idle_predictor import IdlePredictor
-from stacked_lstm import StackedLSTM
 
 
 if __name__ == '__main__':
@@ -35,7 +34,13 @@ if __name__ == '__main__':
         best_dict, loss_hist = idle_predictor.train()
         idle_predictor.save_model(best_dict=best_dict, loss_hist=loss_hist)
         idle_predictor.load_model()
-        idle_predictor.save_loss_hist(loss_hist)
         print('model trained and saved..')
         pass
+    idle_predictor.save_loss_hist(loss_hist)
+    pred, label = idle_predictor.predict()
+    result = idle_predictor.eval(pred=pred, label=label)
+    print(result)
+    idle_predictor.plot_prediction(pred=pred, label=label)
+
+
 

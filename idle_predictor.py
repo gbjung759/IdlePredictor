@@ -7,6 +7,7 @@ from tqdm import trange
 from custom_dataset import CustomDataset
 from torch.utils.data.dataloader import DataLoader
 from stacked_lstm import StackedLSTM
+from sklearn.metrics import *
 
 
 class IdlePredictor:
@@ -29,9 +30,9 @@ class IdlePredictor:
             num_workers=2
         )
         self.test_dataloader = DataLoader(
-            CustomDataset(path=test_path, seq_len=seq_len, use_cols=usecols),
-            batch_size=batch_size,
-            shuffle=True,
+            CustomDataset(path=test_path, seq_len=seq_len, use_cols=usecols, testratio=0.2),
+            batch_size=1,
+            shuffle=False,
             # drop_last=True,
             num_workers=2
         )
@@ -73,40 +74,10 @@ class IdlePredictor:
         else:
             raise ValueError('loss_function이 pytorch에 존재하지 않습니다. 다시 확인하세요.')
 
-    def predict(self):
-        test_DataLoader = torch.utils.data.DataLoader(self.test_dataset, shuffle=False, batch_size=1)
-
-        print("***** Running Prediction *****")
-        print("  Num examples = {}".format(len(self.test_dataset)))
-        print("  Test Batch size = 1")
-
-        model.eval()
-        pred = None
-        label = None
-        for batch in test_DataLoader:
-            input_vector = batch[0].to(self.device)
-
-            with torch.no_grad():
-                predict = model(input_vector)
-
-            if pred is None:
-                pred = predict.detach().cpu().numpy()
-                label = batch[1].numpy()
-            else:
-                pred = np.append(pred, predict.detach().cpu().numpy(), axis=0)
-                label = np.append(label, batch[1].numpy(), axis=0)
-
-        pred = np.argmax(pred, axis=1)
-
-        print("***** Prediction 완료 *****")
-
-        return pred.tolist(), label.tolist()
-
-
-
     def train(self):
         self.set_seed(42)
         train_iterator = trange(self.epochs, desc="Epoch")
+        print("\n***** Running training *****")
         print("  Num Epochs = {}".format(self.epochs))
         print("  Train Batch size = {}".format(self.batch_size))
         print("  Device = ", self.device)
@@ -143,6 +114,36 @@ class IdlePredictor:
         self.model.train(False)
         return best, loss_history
 
+    def predict(self):
+        print("***** Running Prediction *****")
+        print("  Test Batch size = 1")
+        self.model.eval()
+        predictions = None
+        labels = None
+        for [input_vector, label] in self.test_dataloader:
+            input_vector = input_vector.to(self.device)
+            with torch.no_grad():
+                output = self.model(input_vector)
+            if predictions is None:
+                predictions = output.detach().cpu().numpy()
+                labels = label.numpy()
+            else:
+                predictions = np.append(predictions, output.detach().cpu().numpy(), axis=0)
+                labels = np.append(labels, label.numpy(), axis=0)
+        return predictions.tolist(), labels.tolist()
+
+    def eval(self, pred, label):
+        result = dict()
+        result['mean_absolute_error'] = mean_absolute_error(y_true=label, y_pred=pred)
+        result['mean_squared_error'] = mean_squared_error(y_true=label, y_pred=pred, squared=True)
+        result['root_mean_squared_error'] = mean_squared_error(y_true=label, y_pred=pred, squared=False)
+        y_true = np.asarray(label)
+        y_pred = np.asarray(pred)
+        result['mean_absolute_percentage_error'] = np.mean(np.abs((y_true - y_pred) / y_true)) * 100
+        result['mean_squared_log_error'] = mean_squared_log_error(y_true=label, y_pred=pred)
+        result['r2_score'] = r2_score(y_true=label, y_pred=pred)
+        return result
+
     def load_model(self, path='model.pt'):
         with open(path, "rb") as f:
             dump = torch.load(f)
@@ -163,10 +164,26 @@ class IdlePredictor:
 
     @staticmethod
     def save_loss_hist(loss_hist, path='train_loss'):
-        plt.figure(figsize=(16, 4))
-        plt.title("Training Loss Graph")
-        plt.xlabel("epochs")
-        plt.ylabel("loss")
-        plt.yscale("log")
-        plt.plot(loss_hist)
+        plt.plot(np.arange(1, len(loss_hist) + 1), loss_hist, 'k-', label='Train loss', linewidth=1)
+        plt.xlabel('Epochs', labelpad=10)
+        plt.ylabel('Train Loss', labelpad=10)
+        plt.xlim(1, len(loss_hist) + 1)
+        plt.legend(loc='upper right', fancybox=False, edgecolor='k', framealpha=1.0)
+        plt.grid(color='gray', dashes=(2,2))
+        plt.show()
+        plt.savefig(path)
+
+    @staticmethod
+    def plot_prediction(pred, label, path='prediction'):
+        pred = np.asarray(pred)
+        label = np.asarray(label)
+        pred_line, = plt.plot(np.arange(1, len(pred) + 1), pred, 'r-', label='Predicted idle time', linewidth=1)
+        true_line, = plt.plot(np.arange(1, len(label) + 1), label, 'b-', label='Real idle time', linewidth=1)
+        plt.xlim(1, len(pred) + 1)
+        #plt.ylim(np.min(np.append(pred, label)), np.max(np.append(pred, label)))
+        plt.xlabel('I/O commands', labelpad=10)
+        plt.ylabel('Idle time between I/O commands', labelpad=10)
+        plt.legend(loc='upper right', fancybox=False, edgecolor='k', framealpha=1.0)
+        plt.grid(color='gray', dashes=(2,2))
+        plt.show()
         plt.savefig(path)
