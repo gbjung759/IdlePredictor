@@ -13,7 +13,8 @@ if __name__ == '__main__':
         optimizer = config['optimizer']
         epochs = config['epochs']
         seq_len = config['seq_len']
-        usecols = ['Timestamp', 'Response', 'IOType', 'Offset', 'Size']
+        #usecols = ['Timestamp', 'Response', 'IOType', 'Offset', 'Size']
+        usecols = ['Timestamp']
 
     idle_predictor = IdlePredictor(train_path='./dataset/train',
                                    test_path='./dataset/test',
@@ -30,7 +31,6 @@ if __name__ == '__main__':
         loss_hist = dump['loss_history']
         print('skip train..')
     except:
-        idle_predictor.train()
         best_dict, loss_hist = idle_predictor.train()
         idle_predictor.save_model(best_dict=best_dict, loss_hist=loss_hist)
         idle_predictor.load_model()

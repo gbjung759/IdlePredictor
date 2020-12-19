@@ -26,14 +26,14 @@ class IdlePredictor:
             CustomDataset(path=train_path, seq_len=seq_len, use_cols=usecols),
             batch_size=batch_size,
             shuffle=True,
-            # drop_last=True,
+            drop_last=True,
             num_workers=2
         )
         self.test_dataloader = DataLoader(
-            CustomDataset(path=test_path, seq_len=seq_len, use_cols=usecols, testratio=0.2),
+            CustomDataset(path=test_path, seq_len=seq_len, use_cols=usecols),
             batch_size=1,
             shuffle=False,
-            # drop_last=True,
+            drop_last=True,
             num_workers=2
         )
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -67,6 +67,8 @@ class IdlePredictor:
     def get_loss_function(self, loss_ft):
         if loss_ft == 'mseloss':
             return torch.nn.MSELoss()
+        elif loss_ft == 'l1loss':
+            return torch.nn.L1Loss()
         elif loss_ft == 'crossentropyloss':
             return torch.nn.CrossEntropyLoss()
         elif loss_ft == 'nllloss':
@@ -130,7 +132,7 @@ class IdlePredictor:
             else:
                 predictions = np.append(predictions, output.detach().cpu().numpy(), axis=0)
                 labels = np.append(labels, label.numpy(), axis=0)
-        return predictions.tolist(), labels.tolist()
+        return self.get_idle_from_timestamp(predictions.tolist()), self.get_idle_from_timestamp(labels.tolist())
 
     def eval(self, pred, label):
         result = dict()
@@ -140,18 +142,17 @@ class IdlePredictor:
         y_true = np.asarray(label)
         y_pred = np.asarray(pred)
         result['mean_absolute_percentage_error'] = np.mean(np.abs((y_true - y_pred) / y_true)) * 100
-        result['mean_squared_log_error'] = mean_squared_log_error(y_true=label, y_pred=pred)
         result['r2_score'] = r2_score(y_true=label, y_pred=pred)
         return result
 
-    def load_model(self, path='model.pt'):
+    def load_model(self, path='./model/model.pt'):
         with open(path, "rb") as f:
             dump = torch.load(f)
             self.model.load_state_dict(dump['state'])
         return dump
 
     @staticmethod
-    def save_model(best_dict, loss_hist, path='model.pt'):
+    def save_model(best_dict, loss_hist, path='./model/model.pt'):
         with open(path, "wb") as f:
             torch.save(
                 {
@@ -165,10 +166,10 @@ class IdlePredictor:
     @staticmethod
     def save_loss_hist(loss_hist, path='train_loss'):
         plt.plot(np.arange(1, len(loss_hist) + 1), loss_hist, 'k-', label='Train loss', linewidth=1)
-        plt.xlabel('Epochs', labelpad=10)
-        plt.ylabel('Train Loss', labelpad=10)
+        plt.xlabel('Epochs', labelpad=10, fontsize=18)
+        plt.ylabel('Train Loss', labelpad=10, fontsize=18)
         plt.xlim(1, len(loss_hist) + 1)
-        plt.legend(loc='upper right', fancybox=False, edgecolor='k', framealpha=1.0)
+        plt.legend(loc='upper right', fancybox=False, edgecolor='k', framealpha=1.0, fontsize=16)
         plt.grid(color='gray', dashes=(2,2))
         plt.show()
         plt.savefig(path)
@@ -180,10 +181,17 @@ class IdlePredictor:
         pred_line, = plt.plot(np.arange(1, len(pred) + 1), pred, 'r-', label='Predicted idle time', linewidth=1)
         true_line, = plt.plot(np.arange(1, len(label) + 1), label, 'b-', label='Real idle time', linewidth=1)
         plt.xlim(1, len(pred) + 1)
-        #plt.ylim(np.min(np.append(pred, label)), np.max(np.append(pred, label)))
-        plt.xlabel('I/O commands', labelpad=10)
-        plt.ylabel('Idle time between I/O commands', labelpad=10)
-        plt.legend(loc='upper right', fancybox=False, edgecolor='k', framealpha=1.0)
+        plt.ylim(np.min(np.append(pred, label)), np.max(np.append(pred, label)))
+        plt.xlabel('I/O commands', labelpad=10, fontsize=18)
+        plt.ylabel('Idle time between I/O commands', labelpad=10, fontsize=18)
+        plt.legend(loc='upper right', fancybox=False, edgecolor='k', framealpha=1.0, fontsize=16)
         plt.grid(color='gray', dashes=(2,2))
         plt.show()
         plt.savefig(path)
+
+    @staticmethod
+    def get_idle_from_timestamp(timestamps):
+        idletimes = list()
+        for i in range(len(timestamps) - 1):
+            idletimes.append(timestamps[i+1] - timestamps[i])
+        return idletimes
