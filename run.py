@@ -1,5 +1,4 @@
 import json
-import torch
 from idle_predictor import IdlePredictor
 
 
@@ -13,8 +12,8 @@ if __name__ == '__main__':
         optimizer = config['optimizer']
         epochs = config['epochs']
         seq_len = config['seq_len']
-        #usecols = ['Timestamp', 'Response', 'IOType', 'Offset', 'Size']
-        usecols = ['Timestamp']
+        usecols = config['usecols']
+        test_set_ratio = config['test_set_ratio']
 
     idle_predictor = IdlePredictor(train_path='./dataset/train',
                                    test_path='./dataset/test',
@@ -25,7 +24,7 @@ if __name__ == '__main__':
                                    early_stop_patience=early_stop_patience,
                                    loss_function=loss_function,
                                    seq_len=seq_len,
-                                   usecols=usecols)
+                                   usecols=usecols, test_set_ratio=test_set_ratio)
     try:
         dump = idle_predictor.load_model()
         loss_hist = dump['loss_history']

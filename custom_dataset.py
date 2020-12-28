@@ -7,7 +7,7 @@ from torch.utils.data import Dataset
 
 
 class CustomDataset(Dataset):
-    def __init__(self, path, seq_len, use_cols, testratio=1.0):
+    def __init__(self, path, seq_len, use_cols, test_set_ratio):
         self.files = glob.glob(os.path.join(path, '*'))
         self.usecols = use_cols
         self.seq_len = seq_len
@@ -22,13 +22,18 @@ class CustomDataset(Dataset):
             else:
                 self.data = datum
                 self.labels = label
-        if testratio < 1.0:
-            num_samples = int(len(self.data) * testratio)
+        if path == './dataset/train':
+            num_samples = int(len(self.data) * (1. - test_set_ratio))
             self.data = self.data[:num_samples]
             self.labels = self.labels[:num_samples]
+        else:
+            num_samples = int(len(self.data) * test_set_ratio)
+            self.data = self.data[len(self.data) - num_samples - 1:]
+            self.labels = self.labels[len(self.data) - num_samples - 1:]
 
         self.data = torch.from_numpy(np.asarray(self.data))
         self.labels = torch.from_numpy(np.asarray(self.labels))
+        print(f'samples: {num_samples}, path: {path}')
 
     def __len__(self):
         return len(self.data)
@@ -41,18 +46,14 @@ class CustomDataset(Dataset):
         label = []
         df = pd.read_csv(self.files[idx], usecols=self.usecols)
         df = df.sort_values(by=['Timestamp'], axis=0)
-        df.loc[df.IOType == 'R', 'IOType'] = 0.0
-        df.loc[df.IOType == 'W', 'IOType'] = 1.0
-        df['Idletime'] = df.Timestamp - df.Timestamp.shift(1)
-        df.Idletime = df.Idletime.fillna(0)
-        df.drop(['Timestamp'], axis=1, inplace=True)
-        idletimes = np.array(df['Idletime'], dtype=np.float32)
+        df.Timestamp = df.Timestamp - df.loc[0, 'Timestamp']
+        idletimes = np.array(df['Timestamp'], dtype=np.float32)
         values = np.array(df, dtype=np.float32)
         for i in range(len(values) - self.seq_len + 1):
             last_index = i + self.seq_len - 1
             datum.append(values[i:last_index])
             label.append(idletimes[last_index])
-        return datum, label
+        return datum, label,
 
 
 

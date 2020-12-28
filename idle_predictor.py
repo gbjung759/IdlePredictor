@@ -12,7 +12,7 @@ from sklearn.metrics import *
 
 class IdlePredictor:
     def __init__(self, train_path, test_path, optimizer, epochs, loss_function,
-                 learning_rate, batch_size, early_stop_patience, seq_len, usecols):
+                 learning_rate, batch_size, early_stop_patience, seq_len, usecols, test_set_ratio):
         self.optimizer = optimizer.lower()
         assert type(self.optimizer) is str, 'optimizer_name의 type은 string이 되어야 합니다.'
         self.loss_function = loss_function
@@ -23,14 +23,14 @@ class IdlePredictor:
         self.early_stop_patience = early_stop_patience
         self.seq_len = seq_len
         self.train_dataloader = DataLoader(
-            CustomDataset(path=train_path, seq_len=seq_len, use_cols=usecols),
+            CustomDataset(path=train_path, seq_len=seq_len, use_cols=usecols, test_set_ratio=test_set_ratio),
             batch_size=batch_size,
             shuffle=True,
             drop_last=True,
             num_workers=2
         )
         self.test_dataloader = DataLoader(
-            CustomDataset(path=test_path, seq_len=seq_len, use_cols=usecols),
+            CustomDataset(path=test_path, seq_len=seq_len, use_cols=usecols, test_set_ratio=test_set_ratio),
             batch_size=1,
             shuffle=False,
             drop_last=True,
@@ -139,9 +139,7 @@ class IdlePredictor:
         result['mean_absolute_error'] = mean_absolute_error(y_true=label, y_pred=pred)
         result['mean_squared_error'] = mean_squared_error(y_true=label, y_pred=pred, squared=True)
         result['root_mean_squared_error'] = mean_squared_error(y_true=label, y_pred=pred, squared=False)
-        y_true = np.asarray(label)
-        y_pred = np.asarray(pred)
-        result['mean_absolute_percentage_error'] = np.mean(np.abs((y_true - y_pred) / y_true)) * 100
+        result['mean_idle_time'] = np.mean(y_true)
         result['r2_score'] = r2_score(y_true=label, y_pred=pred)
         return result
 
@@ -171,15 +169,19 @@ class IdlePredictor:
         plt.xlim(1, len(loss_hist) + 1)
         plt.legend(loc='upper right', fancybox=False, edgecolor='k', framealpha=1.0, fontsize=16)
         plt.grid(color='gray', dashes=(2,2))
-        plt.show()
         plt.savefig(path)
 
     @staticmethod
-    def plot_prediction(pred, label, path='prediction'):
+    def plot_prediction(pred, label, path='prediction', max_len=10000):
+        if len(pred) > max_len:
+            start_index = random.randint(0, len(pred) - max_len)
+            end_index = start_index + max_len
+            pred = pred[start_index:end_index]
+            label = label[start_index:end_index]
         pred = np.asarray(pred)
         label = np.asarray(label)
-        pred_line, = plt.plot(np.arange(1, len(pred) + 1), pred, 'r-', label='Predicted idle time', linewidth=1)
-        true_line, = plt.plot(np.arange(1, len(label) + 1), label, 'b-', label='Real idle time', linewidth=1)
+        plt.plot(np.arange(1, len(pred) + 1), pred, 'r-', label='Predicted idle time', linewidth=1)
+        plt.plot(np.arange(1, len(label) + 1), label, 'b-', label='Real idle time', linewidth=1)
         plt.xlim(1, len(pred) + 1)
         plt.ylim(np.min(np.append(pred, label)), np.max(np.append(pred, label)))
         plt.xlabel('I/O commands', labelpad=10, fontsize=18)
